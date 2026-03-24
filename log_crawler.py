@@ -135,7 +135,7 @@ def upload_chunk(chunk_data, chunk_num):
         logger.error("Batch %d API error: %s", chunk_num, e)
 
 
-def run_triage(cycle_id):
+def run_triage(cycle_id, record_limit=None):
     logger.info("[1/4] Registering Cycle %s…", cycle_id)
     try:
         run_id = requests.post(
@@ -157,6 +157,12 @@ def run_triage(cycle_id):
     except Exception as e:
         logger.error("DragonSuite API Error: %s", e)
         records = []
+
+    if record_limit is not None and record_limit > 0 and records:
+        n = len(records)
+        records = records[:record_limit]
+        if len(records) < n:
+            logger.info("Record limit: processing %d of %d cycle records (CLI cap)", len(records), n)
 
     if records:
         logger.info("[3/4] Harvesting %d test folders in parallel…", len(records))
@@ -252,4 +258,13 @@ def run_triage(cycle_id):
 
 if __name__ == "__main__":
     target_id = sys.argv[1] if len(sys.argv) > 1 else "580"
-    run_triage(target_id)
+    limit = None
+    if len(sys.argv) > 2:
+        try:
+            limit = int(sys.argv[2])
+            if limit <= 0:
+                logger.warning("Record limit must be positive — ignoring %r", sys.argv[2])
+                limit = None
+        except ValueError:
+            logger.warning("Invalid record limit %r — ignoring", sys.argv[2])
+    run_triage(target_id, record_limit=limit)
