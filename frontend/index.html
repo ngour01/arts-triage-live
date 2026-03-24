@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ART Triage Dashboard</title>
+    <style>
+        :root {
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text: #1e293b;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --radius: 10px;
+            --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-lg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        header h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; }
+        header h1 span { color: #60a5fa; }
+        .controls { display: flex; gap: .75rem; align-items: center; }
+        select {
+            padding: .5rem 1rem;
+            border-radius: var(--radius);
+            border: 1px solid rgba(255,255,255,.15);
+            background: rgba(255,255,255,.08);
+            color: #fff;
+            font-size: .875rem;
+            cursor: pointer;
+            outline: none;
+            min-width: 220px;
+        }
+        select option { background: #1e293b; color: #fff; }
+        .btn {
+            padding: .5rem 1rem;
+            border-radius: var(--radius);
+            border: none;
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-outline {
+            background: transparent;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,.2);
+        }
+        .btn-outline:hover { background: rgba(255,255,255,.1); }
+
+        /* Main */
+        main { max-width: 1440px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 5rem 2rem;
+            color: var(--muted);
+        }
+        .empty-state h2 { font-size: 1.5rem; margin-bottom: .5rem; color: var(--text); }
+        .empty-state p { max-width: 480px; margin: 0 auto; }
+        .empty-state code {
+            display: inline-block;
+            margin-top: 1.5rem;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: .75rem 1.25rem;
+            border-radius: 8px;
+            font-size: .8rem;
+            text-align: left;
+            white-space: pre-line;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary);
+            transition: transform .15s;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .stat-card.passing { border-left-color: var(--success); }
+        .stat-card.failing { border-left-color: var(--danger); }
+        .stat-card.sticky  { border-left-color: var(--warning); }
+        .stat-card .label {
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--muted);
+            margin-bottom: .15rem;
+        }
+        .stat-card .value { font-size: 2rem; font-weight: 800; }
+
+        /* Section */
+        .section {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+        .section-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: .75rem;
+        }
+        .section-header h2 { font-size: 1rem; font-weight: 600; }
+        .section-body { padding: 1.25rem 1.5rem; }
+
+        /* Bucket Chart */
+        .bucket-bar { display: flex; align-items: center; margin-bottom: .6rem; }
+        .bucket-bar .name { width: 130px; font-size: .82rem; font-weight: 500; flex-shrink: 0; }
+        .bucket-bar .bar-track {
+            flex: 1;
+            height: 26px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .bucket-bar .bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            font-size: .72rem;
+            font-weight: 700;
+            color: #fff;
+            transition: width .6s cubic-bezier(.22,1,.36,1);
+            min-width: fit-content;
+        }
+        .bucket-bar .count {
+            margin-left: .75rem;
+            font-size: .85rem;
+            font-weight: 700;
+            width: 36px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+        th {
+            background: #f8fafc;
+            padding: .65rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--muted);
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+        td {
+            padding: .6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tr:hover td { background: #f8fafc; }
+        .badge {
+            display: inline-block;
+            padding: .1rem .5rem;
+            border-radius: 9999px;
+            font-size: .72rem;
+            font-weight: 600;
+        }
+        .badge-pass { background: #dcfce7; color: #166534; }
+        .badge-fail { background: #fee2e2; color: #991b1b; }
+        .badge-sticky { background: #fef3c7; color: #92400e; }
+        .bucket-tag {
+            display: inline-block;
+            padding: .1rem .5rem;
+            border-radius: 6px;
+            font-size: .72rem;
+            font-weight: 600;
+        }
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Search & Filter */
+        .toolbar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+        .search-box {
+            padding: .45rem .75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: .82rem;
+            width: 220px;
+            outline: none;
+            transition: border .15s;
+        }
+        .search-box:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+        .filter-btn {
+            padding: .25rem .7rem;
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            background: #fff;
+            font-size: .72rem;
+            cursor: pointer;
+            transition: all .15s;
+            font-weight: 500;
+        }
+        .filter-btn:hover, .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        /* Error pills in table */
+        .error-list { display: flex; flex-direction: column; gap: 4px; }
+        .error-pill {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: .72rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .error-pill .error-tag {
+            flex-shrink: 0;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: .65rem;
+            white-space: nowrap;
+        }
+
+        /* Patterns */
+        .pattern-card {
+            padding: .85rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: .6rem;
+            transition: box-shadow .15s;
+        }
+        .pattern-card:hover { box-shadow: var(--shadow); }
+        .pattern-card .fp { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: .7rem; color: var(--muted); }
+        .pattern-card .msg { font-size: .82rem; margin-top: .2rem; word-break: break-word; }
+
+        /* Load More */
+        .load-more {
+            text-align: center;
+            padding: 1rem;
+        }
+        .load-more button {
+            padding: .5rem 2rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            font-size: .82rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .load-more button:hover { background: #2563eb; }
+
+        /* Spinner */
+        .spinner {
+            width: 18px; height: 18px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin .5s linear infinite;
+            display: inline-block;
+            margin-right: .5rem;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading { text-align: center; padding: 2rem; color: var(--muted); }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: #1e293b;
+            color: #fff;
+            padding: .75rem 1.25rem;
+            border-radius: var(--radius);
+            font-size: .82rem;
+            box-shadow: var(--shadow-lg);
+            z-index: 999;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all .3s;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 768px) {
+            main { padding: 1rem; }
+            header { padding: .75rem 1rem; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            select { min-width: 160px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><span>ART</span> Triage Dashboard</h1>
+        <div class="controls">
+            <select id="run-select">
+                <option value="">Select a Cycle Run...</option>
+            </select>
+            <button class="btn btn-outline" onclick="refreshData()">Refresh</button>
+        </div>
+    </header>
+
+    <main>
+        <div id="empty-state" class="empty-state">
+            <h2>Welcome to ART Triage</h2>
+            <p>Select a cycle run above to view triage results, or run the crawler to import data first.</p>
+            <code>1. pip install -r requirements.txt
+2. python seeder.py
+3. uvicorn backend.api:app --port 8000 --reload
+4. python log_crawler.py &lt;cycle_id&gt;</code>
+        </div>
+
+        <div id="dashboard" style="display:none;">
+            <div class="stats-grid" id="stats-grid"></div>
+
+            <div class="section">
+                <div class="section-header">
+                    <h2>Bucket Distribution</h2>
+                </div>
+                <div class="section-body" id="bucket-chart"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-header">
+                    <h2>Test Results</h2>
+                    <div class="toolbar">
+                        <div id="bucket-filters">
+                            <button class="filter-btn active" data-bucket="all" onclick="setFilter('all')">All</button>
+                        </div>
+                        <input type="text" class="search-box" id="search-box" placeholder="Search tests...">
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>Test Case</th>
+                                <th>Attempt</th>
+                                <th>Status</th>
+                                <th>Bucket</th>
+                                <th style="min-width:280px">Error(s)</th>
+                                <th>Sticky</th>
+                                <th>Bug ID</th>
+                                <th>Log</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="load-more" id="load-more" style="display:none;">
+                    <button onclick="loadMore()">Load More Results</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header">
+                    <h2>Error Patterns</h2>
+                    <span id="pattern-count" style="font-size:.8rem;color:var(--muted);"></span>
+                </div>
+                <div class="section-body" id="patterns-container"></div>
+            </div>
+        </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API = '/api/v1';
+        const COLORS = {
+            1: '#f59e0b', 2: '#3b82f6', 3: '#ef4444',
+            4: '#6b7280', 5: '#8b5cf6', 6: '#eab308'
+        };
+
+        let bucketsMap = {};
+        let allFailures = [];
+        let allPatterns = [];
+        let currentFilter = 'all';
+        let currentSkip = 0;
+        let totalRecords = 0;
+        const PAGE = 500;
+
+        function toast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
+
+        async function init() {
+            try {
+                const [runsRes, bucketsRes] = await Promise.all([
+                    fetch(`${API}/runs`), fetch(`${API}/buckets`)
+                ]);
+
+                if (!runsRes.ok || !bucketsRes.ok) throw new Error('API error');
+                const runs = await runsRes.json();
+                const buckets = await bucketsRes.json();
+
+                buckets.forEach(b => { bucketsMap[b.id] = b; });
+
+                const sel = document.getElementById('run-select');
+                runs.forEach(r => {
+                    const o = document.createElement('option');
+                    o.value = r.identifier;
+                    const d = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
+                    o.textContent = `Cycle ${r.identifier}` + (d ? ` (${d})` : '');
+                    sel.appendChild(o);
+                });
+
+                const filters = document.getElementById('bucket-filters');
+                buckets.forEach(b => {
+                    const btn = document.createElement('button');
+                    btn.className = 'filter-btn';
+                    btn.dataset.bucket = b.id;
+                    btn.textContent = b.name;
+                    btn.onclick = () => setFilter(String(b.id));
+                    filters.appendChild(btn);
+                });
+
+                sel.onchange = () => { if (sel.value) loadRun(sel.value); };
+
+                if (runs.length === 0) {
+                    document.getElementById('empty-state').style.display = '';
+                }
+            } catch (e) {
+                console.error('Init failed:', e);
+                toast('Could not connect to API. Is the server running on port 8000?');
+            }
+        }
+
+        function setFilter(bid) {
+            currentFilter = bid;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.bucket === bid);
+            });
+            renderTable();
+        }
+
+        async function loadRun(identifier) {
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('dashboard').style.display = '';
+            document.getElementById('stats-grid').innerHTML = '<div class="loading"><span class="spinner"></span>Loading...</div>';
+
+            try {
+                const [sRes, eRes] = await Promise.all([
+                    fetch(`${API}/runs/${identifier}/summary`),
+                    fetch(`${API}/export/${identifier}?limit=${PAGE}&skip=0`)
+                ]);
+
+                if (!sRes.ok || !eRes.ok) throw new Error('API error');
+                const summary = await sRes.json();
+                const exp = await eRes.json();
+
+                allPatterns = exp.patterns || [];
+                currentSkip = PAGE;
+                totalRecords = exp.pagination?.total_records || 0;
+                allFailures = groupByAttempt(exp.failures || []);
+
+                renderStats(summary);
+                renderBucketChart(summary.buckets || []);
+                renderTable();
+                renderPatterns();
+                toast(`Loaded cycle ${identifier}`);
+            } catch (e) {
+                console.error('Load failed:', e);
+                toast('Failed to load run data.');
+            }
+        }
+
+        async function loadMore() {
+            const id = document.getElementById('run-select').value;
+            if (!id) return;
+            try {
+                const res = await fetch(`${API}/export/${id}?limit=${PAGE}&skip=${currentSkip}`);
+                const data = await res.json();
+                allFailures = allFailures.concat(groupByAttempt(data.failures || []));
+                currentSkip += PAGE;
+                renderTable();
+            } catch (e) { toast('Failed to load more data.'); }
+        }
+
+        function refreshData() {
+            const sel = document.getElementById('run-select');
+            sel.innerHTML = '<option value="">Select a Cycle Run...</option>';
+            bucketsMap = {};
+            allFailures = [];
+            allPatterns = [];
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('empty-state').style.display = '';
+            init();
+        }
+
+        function renderStats(s) {
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="stat-card"><div class="label">Total Tests</div><div class="value">${s.total||0}</div></div>
+                <div class="stat-card passing"><div class="label">Passing</div><div class="value">${s.passing||0}</div></div>
+                <div class="stat-card failing"><div class="label">Failing</div><div class="value">${s.failing||0}</div></div>
+                <div class="stat-card sticky"><div class="label">Sticky Failures</div><div class="value">${s.sticky_failures||0}</div></div>
+            `;
+        }
+
+        function renderBucketChart(buckets) {
+            const el = document.getElementById('bucket-chart');
+            const mx = Math.max(...buckets.map(b => b.count || 0), 1);
+            el.innerHTML = buckets.map(b => {
+                const pct = ((b.count || 0) / mx) * 100;
+                const c = COLORS[b.id] || '#6b7280';
+                return `<div class="bucket-bar">
+                    <span class="name">${b.name}</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width:${Math.max(pct, b.count > 0 ? 4 : 0)}%;background:${c};">
+                            ${b.count > 0 ? b.count : ''}
+                        </div>
+                    </div>
+                    <span class="count">${b.count || 0}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function groupByAttempt(rows) {
+            const map = {};
+            for (const r of rows) {
+                const key = r.log_url || `${r.feature_name}|${r.test_case_name}|${r.attempt_number}`;
+                if (!map[key]) {
+                    map[key] = { ...r, errors: [] };
+                }
+                if (r.scrubbed_message && r.scrubbed_message !== 'N/A') {
+                    map[key].errors.push({
+                        message: r.scrubbed_message,
+                        error_class: r.pattern_error_class || r.error_class || '',
+                        bucket_id: r.signal_bucket_id,
+                        fingerprint: r.fingerprint,
+                        bug_id: r.bug_id
+                    });
+                }
+                if (r.bug_id && !map[key].bug_id) {
+                    map[key].bug_id = r.bug_id;
+                }
+            }
+            return Object.values(map);
+        }
+
+        function renderErrorPills(errors) {
+            if (!errors || !errors.length) return '<span style="color:var(--muted);font-size:.75rem;">-</span>';
+            return '<div class="error-list">' + errors.map(e => {
+                const bid = e.bucket_id;
+                const bc = COLORS[bid] || '#6b7280';
+                const bk = bucketsMap[bid];
+                const tag = bk ? bk.name : 'Unknown';
+                return `<div class="error-pill" style="background:${bc}0d;">
+                    <span class="error-tag" style="background:${bc}22;color:${bc};">${esc(tag)}</span>
+                    <span>${esc(e.message)}</span>
+                </div>`;
+            }).join('') + '</div>';
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('results-tbody');
+            const q = document.getElementById('search-box').value.toLowerCase();
+            let rows = allFailures;
+
+            if (currentFilter !== 'all') {
+                rows = rows.filter(r => String(r.latest_bucket_id) === currentFilter
+                    || r.errors.some(e => String(e.bucket_id) === currentFilter));
+            }
+            if (q) {
+                rows = rows.filter(r =>
+                    (r.feature_name || '').toLowerCase().includes(q) ||
+                    (r.test_case_name || '').toLowerCase().includes(q) ||
+                    (r.bug_id || '').toLowerCase().includes(q) ||
+                    r.errors.some(e => (e.message || '').toLowerCase().includes(q))
+                );
+            }
+
+            tbody.innerHTML = rows.map(f => {
+                const bk = bucketsMap[f.latest_bucket_id];
+                const bn = bk ? bk.name : '-';
+                const bc = COLORS[f.latest_bucket_id] || '#6b7280';
+                const sc = f.att_status === 'PASS' ? 'badge-pass' : 'badge-fail';
+                return `<tr>
+                    <td>${esc(f.feature_name || '-')}</td>
+                    <td>${esc(f.test_case_name || '-')}</td>
+                    <td>#${f.attempt_number || 1}</td>
+                    <td><span class="badge ${sc}">${f.att_status || 'N/A'}</span></td>
+                    <td><span class="bucket-tag" style="background:${bc}18;color:${bc};">${bn}</span></td>
+                    <td>${renderErrorPills(f.errors)}</td>
+                    <td>${f.has_sticky_failure ? '<span class="badge badge-sticky">STICKY</span>' : '-'}</td>
+                    <td>${esc(f.bug_id || '-')}</td>
+                    <td>${f.log_url ? `<a href="${esc(f.log_url)}" target="_blank" rel="noopener">View</a>` : '-'}</td>
+                </tr>`;
+            }).join('');
+
+            const lm = document.getElementById('load-more');
+            lm.style.display = currentSkip < totalRecords ? '' : 'none';
+        }
+
+        function renderPatterns() {
+            const el = document.getElementById('patterns-container');
+            document.getElementById('pattern-count').textContent = `${allPatterns.length} pattern(s)`;
+            if (!allPatterns.length) {
+                el.innerHTML = '<p style="color:var(--muted);">No error patterns recorded for this run.</p>';
+                return;
+            }
+            el.innerHTML = allPatterns.map(p => {
+                const bk = bucketsMap[p.resolved_bucket_id];
+                const bc = COLORS[p.resolved_bucket_id] || '#6b7280';
+                return `<div class="pattern-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="fp">${esc(p.fingerprint)}</span>
+                        <span class="bucket-tag" style="background:${bc}18;color:${bc};">${bk ? bk.name : 'Unknown'}</span>
+                    </div>
+                    <div class="msg">${esc(p.scrubbed_message || 'N/A')}</div>
+                    <div style="font-size:.7rem;color:var(--muted);margin-top:.15rem;">Class: ${esc(p.error_class || 'N/A')}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        document.getElementById('search-box').addEventListener('input', renderTable);
+        init();
+    </script>
+</body>
+</html>
