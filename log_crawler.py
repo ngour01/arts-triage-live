@@ -1,7 +1,6 @@
 import os
 import sys
 import re
-import time
 import logging
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,25 +13,18 @@ logging.basicConfig(
 logger = logging.getLogger("art_triage.crawler")
 
 API = "http://localhost:8000/api/v1"
-DRAGON_SUITE = "http://dragonsuite-app.vdp.lvn.broadcom.net/apis/v1/getCycleRecords"
 API_KEY = os.environ.get("ART_API_KEY")
 API_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
 
-def fetch(url, retries=3, timeout=30):
-    """GET with automatic retry and exponential back-off."""
-    for attempt in range(retries):
-        try:
-            r = requests.get(url, timeout=timeout)
-            return r.text if r.status_code == 200 else None
-        except Exception as e:
-            if attempt < retries - 1:
-                delay = 2.0 * (attempt + 1)
-                logger.debug("Fetch retry %d/%d for %s: %s", attempt + 1, retries, url, e)
-                time.sleep(delay)
-            else:
-                logger.warning("Failed to fetch %s after %d attempts: %s", url, retries, e)
-                return None
+def fetch(url, timeout=15):
+    """Single-attempt GET. Returns text on 200, None on any failure."""
+    try:
+        r = requests.get(url, timeout=timeout)
+        return r.text if r.status_code == 200 else None
+    except Exception as e:
+        logger.debug("Failed to fetch %s: %s", url, e)
+        return None
 
 
 def get_full_psod_trace(summary_txt):
@@ -65,7 +57,7 @@ def get_full_psod_trace(summary_txt):
 
 
 def find_log_files(url, depth=0, max_depth=3, visited=None):
-    """Recursively discover stateDump.json.txt files up to *max_depth* levels."""
+    """Recursively discover stateDump.json.txt files (not .gz) up to *max_depth* levels."""
     if visited is None:
         visited = set()
     if depth > max_depth or url in visited:
@@ -76,13 +68,17 @@ def find_log_files(url, depth=0, max_depth=3, visited=None):
     if not txt:
         return []
 
-    files = [urljoin(url, f) for f in re.findall(r'href="([^"]*stateDump\.json\.txt[^"]*)"', txt)]
+    files = [urljoin(url, f) for f in re.findall(r'href="([^"]*stateDump\.json\.txt)"', txt)]
 
     if depth < max_depth:
         sub_dirs = [urljoin(url, d) for d in re.findall(r'href="([^/."][^"]*/)"', txt)]
+        logger.debug("  depth=%d %s → %d subdirs", depth, url.split('/')[-2], len(sub_dirs))
         for sd in sub_dirs:
             if sd not in visited:
                 files.extend(find_log_files(sd, depth + 1, max_depth, visited))
+
+    if files:
+        logger.info("  Found %d stateDump(s) under %s", len(files), url.split('?')[0].rstrip('/').split('/')[-1])
 
     return list(set(files))
 
@@ -97,7 +93,7 @@ def process_record_folder(record, run_id):
 
     for l_url in files:
         try:
-            log_data = requests.get(l_url, timeout=30).json()
+            log_data = requests.get(l_url, timeout=10).json()
             summary_url = urljoin(l_url.rsplit('/', 1)[0] + '/', "testbedSummary.html")
             atomic_sigs = get_full_psod_trace(fetch(summary_url))
 
@@ -127,7 +123,7 @@ def upload_chunk(chunk_data, chunk_num):
             f"{API}/triage/attempts/batch",
             json=chunk_data,
             headers=API_HEADERS,
-            timeout=60,
+            timeout=30,
         )
         if res.status_code == 200:
             logger.info("Uploaded batch %d (%d items)", chunk_num, len(chunk_data))
@@ -146,7 +142,7 @@ def run_triage(cycle_id):
             f"{API}/runs",
             json={"identifier": cycle_id},
             headers=API_HEADERS,
-            timeout=10,
+            timeout=5,
         ).json()['id']
     except Exception as e:
         logger.error("API offline! Error: %s", e)
@@ -155,8 +151,8 @@ def run_triage(cycle_id):
     logger.info("[2/4] Fetching failure records from DragonSuite…")
     try:
         records = requests.get(
-            f"{DRAGON_SUITE}?cycle_id={cycle_id}&job_status=fail",
-            timeout=60,
+            f"http://localhost:9000/apis/v1/getCycleRecords?cycle_id={cycle_id}&job_status=fail",
+            timeout=20,
         ).json().get("cycle_records", [])
     except Exception as e:
         logger.error("DragonSuite API Error: %s", e)
@@ -170,7 +166,7 @@ def run_triage(cycle_id):
         chunk_size = 50
         completed_folders = 0
 
-        with ThreadPoolExecutor(max_workers=100) as exe:
+        with ThreadPoolExecutor(max_workers=20) as exe:
             futs = [exe.submit(process_record_folder, r, run_id) for r in records]
 
             for f in as_completed(futs):
@@ -184,8 +180,8 @@ def run_triage(cycle_id):
                 if payloads_found:
                     current_chunk.extend(payloads_found)
 
-                if completed_folders % 20 == 0 or completed_folders == len(records):
-                    logger.info("  Progress: %d/%d folders checked", completed_folders, len(records))
+                logger.info("  Progress: %d/%d folders done (%d payloads so far)",
+                            completed_folders, len(records), len(current_chunk))
 
                 while len(current_chunk) >= chunk_size:
                     chunk_count += 1
@@ -203,6 +199,45 @@ def run_triage(cycle_id):
         requests.post(f"{API}/runs/{cycle_id}/refresh", headers=API_HEADERS, timeout=15)
     except Exception as e:
         logger.warning("Failed to refresh run stats: %s", e)
+
+    try:
+        sr = requests.get(f"{API}/runs/{cycle_id}/stats", timeout=20)
+        if sr.ok:
+            st = sr.json()
+            t = st.get("totals") or {}
+            logger.info(
+                "[%s] STATS totals: executions=%s passing=%s failing=%s sticky=%s attempts=%s "
+                "signals=%s signals_w_bug=%s unique_issues=%s unique_patterns=%s",
+                cycle_id,
+                t.get("test_executions"),
+                t.get("passing"),
+                t.get("failing"),
+                t.get("sticky_failures"),
+                t.get("test_attempts"),
+                t.get("triage_signals"),
+                t.get("signals_with_bug"),
+                t.get("unique_bug_count"),
+                t.get("unique_error_patterns"),
+            )
+            for b in st.get("buckets") or []:
+                if b.get("failing_or_sticky_executions") or b.get("signal_count") or b.get("unique_bug_ids"):
+                    issues = ",".join(b["unique_bug_ids"]) if b.get("unique_bug_ids") else "-"
+                    logger.info(
+                        "[%s] STATS bucket %s %s: failing/sticky_exec=%s signals=%s unique_issues=[%s]",
+                        cycle_id,
+                        b.get("id"),
+                        b.get("name"),
+                        b.get("failing_or_sticky_executions"),
+                        b.get("signal_count"),
+                        issues,
+                    )
+            u = st.get("unique_bug_ids") or []
+            if u:
+                logger.info("[%s] STATS unique issues (all buckets): %s", cycle_id, ", ".join(u))
+        else:
+            logger.warning("Could not fetch run stats: HTTP %s", sr.status_code)
+    except Exception as e:
+        logger.warning("Failed to fetch run stats: %s", e)
 
     try:
         from messenger import Messenger

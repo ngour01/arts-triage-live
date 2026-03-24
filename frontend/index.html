@@ -304,6 +304,52 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .loading { text-align: center; padding: 2rem; color: var(--muted); }
 
+        /* Ingest Panel */
+        .ingest-panel {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .75rem;
+            align-items: flex-end;
+        }
+        .ingest-panel label { font-size: .75rem; font-weight: 600; color: var(--muted); }
+        .ingest-field { display: flex; flex-direction: column; gap: .25rem; }
+        .ingest-field input {
+            padding: .45rem .75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: .82rem;
+            outline: none;
+            width: 340px;
+            transition: border .15s;
+        }
+        .ingest-field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+        .ingest-field input.short { width: 200px; }
+        .ingest-field input.shorter { width: 150px; }
+        .ingest-progress { font-size: .78rem; color: var(--muted); align-self: center; }
+
+        /* Bug editing inside table */
+        .bug-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .bug-link { color: var(--primary); font-size: .78rem; font-weight: 600; cursor: pointer; }
+        .bug-link:hover { text-decoration: underline; }
+        .bug-edit-form { display: flex; gap: 4px; align-items: center; }
+        .bug-edit-form input {
+            width: 110px;
+            padding: 2px 6px;
+            font-size: .75rem;
+            border: 1px solid var(--primary);
+            border-radius: 6px;
+            outline: none;
+        }
+        .bug-edit-form .save-bug { background: var(--primary); color: #fff; border: none; border-radius: 5px; padding: 2px 7px; font-size: .72rem; cursor: pointer; }
+        .bug-edit-form .cancel-bug { background: transparent; border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; font-size: .72rem; cursor: pointer; }
+        .add-bug-btn { font-size: .72rem; color: var(--primary); cursor: pointer; border: 1px dashed var(--primary); border-radius: 5px; padding: 1px 6px; background: transparent; }
+        .add-bug-btn:hover { background: rgba(59,130,246,.07); }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -337,22 +383,47 @@
             <select id="run-select">
                 <option value="">Select a Cycle Run...</option>
             </select>
+            <button class="btn btn-outline" onclick="toggleIngest()">+ Ingest URL</button>
             <button class="btn btn-outline" onclick="refreshData()">Refresh</button>
         </div>
     </header>
 
     <main>
+        <!-- Smart Ingest Panel -->
+        <div id="ingest-panel" class="ingest-panel" style="display:none;">
+            <div class="ingest-field">
+                <label>Log / Directory URL *</label>
+                <input id="ingest-url" type="url" placeholder="https://host/path/to/test/ or .../stateDump.json.txt">
+            </div>
+            <div class="ingest-field">
+                <label>Report Name *</label>
+                <input id="ingest-run" class="short" type="text" placeholder="e.g. Cycle-580">
+            </div>
+            <div class="ingest-field">
+                <label>Feature (optional)</label>
+                <input id="ingest-feature" class="shorter" type="text" placeholder="feature name">
+            </div>
+            <button class="btn btn-primary" onclick="submitIngest()">Ingest</button>
+            <button class="btn btn-outline" style="color:var(--text);border-color:var(--border);" onclick="toggleIngest()">Cancel</button>
+            <span id="ingest-progress" class="ingest-progress"></span>
+        </div>
+
         <div id="empty-state" class="empty-state">
             <h2>Welcome to ART Triage</h2>
-            <p>Select a cycle run above to view triage results, or run the crawler to import data first.</p>
-            <code>1. pip install -r requirements.txt
-2. python seeder.py
-3. uvicorn backend.api:app --port 8000 --reload
-4. python log_crawler.py &lt;cycle_id&gt;</code>
+            <p>Select a cycle run above to view triage results, or use <strong>+ Ingest URL</strong> to import from any log URL.</p>
+            <code>uvicorn backend.api:app --port 8000 --reload</code>
         </div>
 
         <div id="dashboard" style="display:none;">
             <div class="stats-grid" id="stats-grid"></div>
+
+            <div class="section" id="run-stats-section" style="display:none;">
+                <div class="section-header">
+                    <h2>Run statistics</h2>
+                    <span id="run-stats-issues" style="font-size:.78rem;color:var(--muted);"></span>
+                </div>
+                <div class="section-body" id="run-stats-body"></div>
+            </div>
 
             <div class="section">
                 <div class="section-header">
@@ -380,9 +451,9 @@
                                 <th>Attempt</th>
                                 <th>Status</th>
                                 <th>Bucket</th>
-                                <th style="min-width:280px">Error(s)</th>
+                                <th style="min-width:300px">Error(s)</th>
                                 <th>Sticky</th>
-                                <th>Bug ID</th>
+                                <th title="Click a bug ID or + to edit; same ID can cover multiple tests">Bug ID</th>
                                 <th>Log</th>
                             </tr>
                         </thead>
@@ -484,14 +555,16 @@
             document.getElementById('stats-grid').innerHTML = '<div class="loading"><span class="spinner"></span>Loading...</div>';
 
             try {
-                const [sRes, eRes] = await Promise.all([
+                const [sRes, eRes, stRes] = await Promise.all([
                     fetch(`${API}/runs/${identifier}/summary`),
-                    fetch(`${API}/export/${identifier}?limit=${PAGE}&skip=0`)
+                    fetch(`${API}/export/${identifier}?limit=${PAGE}&skip=0`),
+                    fetch(`${API}/runs/${identifier}/stats`),
                 ]);
 
                 if (!sRes.ok || !eRes.ok) throw new Error('API error');
                 const summary = await sRes.json();
                 const exp = await eRes.json();
+                const runStats = stRes.ok ? await stRes.json() : null;
 
                 allPatterns = exp.patterns || [];
                 currentSkip = PAGE;
@@ -500,6 +573,7 @@
 
                 renderStats(summary);
                 renderBucketChart(summary.buckets || []);
+                renderRunStats(runStats);
                 renderTable();
                 renderPatterns();
                 toast(`Loaded cycle ${identifier}`);
@@ -541,6 +615,48 @@
             `;
         }
 
+        function renderRunStats(st) {
+            const sec = document.getElementById('run-stats-section');
+            const body = document.getElementById('run-stats-body');
+            const iss = document.getElementById('run-stats-issues');
+            if (!st || !st.totals) {
+                sec.style.display = 'none';
+                return;
+            }
+            sec.style.display = '';
+            const t = st.totals;
+            iss.textContent = `${t.unique_bug_count || 0} unique issue id(s) · ${t.triage_signals || 0} signal(s) · ${t.unique_error_patterns || 0} distinct pattern(s)`;
+            const rows = (st.buckets || []).map(b => {
+                const u = (b.unique_bug_ids || []).length ? esc(b.unique_bug_ids.join(', ')) : '—';
+                return `<tr>
+                    <td><span class="bucket-tag" style="background:${(COLORS[b.id]||'#6b7280')}18;color:${COLORS[b.id]||'#6b7280'};">${esc(b.name)}</span></td>
+                    <td>${b.failing_or_sticky_executions ?? 0}</td>
+                    <td>${b.signal_count ?? 0}</td>
+                    <td>${b.unique_bug_count ?? 0}</td>
+                    <td style="font-size:.78rem;word-break:break-all;">${u}</td>
+                </tr>`;
+            }).join('');
+            body.innerHTML = `
+                <p style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem;">
+                    Attempts: <strong>${t.test_attempts ?? 0}</strong> ·
+                    Signals with bug id: <strong>${t.signals_with_bug ?? 0}</strong>
+                </p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Bucket</th>
+                                <th>Failing / sticky exec</th>
+                                <th>Signals</th>
+                                <th>Unique issues</th>
+                                <th>Issue ids</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
         function renderBucketChart(buckets) {
             const el = document.getElementById('bucket-chart');
             const mx = Math.max(...buckets.map(b => b.count || 0), 1);
@@ -564,36 +680,85 @@
             for (const r of rows) {
                 const key = r.log_url || `${r.feature_name}|${r.test_case_name}|${r.attempt_number}`;
                 if (!map[key]) {
-                    map[key] = { ...r, errors: [] };
+                    map[key] = { ...r, errors: [], _attempt_id: r.attempt_id || 0 };
                 }
                 if (r.scrubbed_message && r.scrubbed_message !== 'N/A') {
-                    map[key].errors.push({
-                        message: r.scrubbed_message,
-                        error_class: r.pattern_error_class || r.error_class || '',
-                        bucket_id: r.signal_bucket_id,
-                        fingerprint: r.fingerprint,
-                        bug_id: r.bug_id
-                    });
+                    const fp = r.fingerprint || '';
+                    if (!map[key].errors.some(e => e.fingerprint === fp)) {
+                        map[key].errors.push({
+                            message: r.scrubbed_message,
+                            error_class: r.pattern_error_class || r.error_class || '',
+                            bucket_id: r.signal_bucket_id,
+                            fingerprint: fp,
+                            bug_id: r.bug_id || null
+                        });
+                    }
                 }
-                if (r.bug_id && !map[key].bug_id) {
-                    map[key].bug_id = r.bug_id;
-                }
+                // keep attempt id for bug-edit calls
+                if (r.attempt_id) map[key]._attempt_id = r.attempt_id;
             }
             return Object.values(map);
         }
 
-        function renderErrorPills(errors) {
+        function renderErrorPills(errors, attemptId) {
             if (!errors || !errors.length) return '<span style="color:var(--muted);font-size:.75rem;">-</span>';
             return '<div class="error-list">' + errors.map(e => {
                 const bid = e.bucket_id;
                 const bc = COLORS[bid] || '#6b7280';
                 const bk = bucketsMap[bid];
                 const tag = bk ? bk.name : 'Unknown';
+                const bugHtml = e.bug_id
+                    ? `<span class="bug-link" title="Click to change" onclick="editSignalBug(${attemptId},'${esc(e.fingerprint)}','${esc(e.bug_id || '')}')">${esc(e.bug_id)}</span>`
+                    : `<button class="add-bug-btn" onclick="editSignalBug(${attemptId},'${esc(e.fingerprint)}','')">+bug</button>`;
                 return `<div class="error-pill" style="background:${bc}0d;">
                     <span class="error-tag" style="background:${bc}22;color:${bc};">${esc(tag)}</span>
-                    <span>${esc(e.message)}</span>
+                    <span style="flex:1;">${esc(e.message)}</span>
+                    <span style="flex-shrink:0;">${bugHtml}</span>
                 </div>`;
             }).join('') + '</div>';
+        }
+
+        function editSignalBug(attemptId, fingerprint, current) {
+            const key = `${attemptId}__${fingerprint}`;
+            const existing = document.getElementById('bef-' + key);
+            if (existing) { existing.remove(); return; }
+
+            const form = document.createElement('div');
+            form.className = 'bug-edit-form';
+            form.id = 'bef-' + key;
+            form.innerHTML = `<input id="bfi-${key}" type="text" value="${esc(current)}" placeholder="JIRA-123" maxlength="80">
+                <button class="save-bug" onclick="saveSignalBug(${attemptId},'${fingerprint}','bfi-${key}')">Save</button>
+                <button class="cancel-bug" onclick="document.getElementById('bef-${key}').remove()">✕</button>`;
+
+            const pillRow = event.target.closest('.error-pill');
+            if (pillRow) {
+                pillRow.after(form);
+                form.querySelector('input').focus();
+            }
+        }
+
+        async function saveSignalBug(attemptId, fingerprint, inputId) {
+            const val = document.getElementById(inputId)?.value?.trim() || null;
+            try {
+                const res = await fetch(`${API}/triage/signals`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ test_attempt_id: attemptId, fingerprint, bug_id: val || null })
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const key = `${attemptId}__${fingerprint}`;
+                document.getElementById('bef-' + key)?.remove();
+
+                // update in-memory
+                for (const f of allFailures) {
+                    const e = f.errors.find(e => e.fingerprint === fingerprint);
+                    if (e) { e.bug_id = val || null; }
+                }
+                renderTable();
+                toast(val ? `Bug ${val} assigned` : 'Bug ID cleared');
+            } catch (err) {
+                toast('Failed to save bug ID: ' + err.message);
+            }
         }
 
         function renderTable() {
@@ -610,7 +775,10 @@
                     (r.feature_name || '').toLowerCase().includes(q) ||
                     (r.test_case_name || '').toLowerCase().includes(q) ||
                     (r.bug_id || '').toLowerCase().includes(q) ||
-                    r.errors.some(e => (e.message || '').toLowerCase().includes(q))
+                    r.errors.some(e =>
+                        (e.message || '').toLowerCase().includes(q) ||
+                        (e.bug_id || '').toLowerCase().includes(q)
+                    )
                 );
             }
 
@@ -619,15 +787,21 @@
                 const bn = bk ? bk.name : '-';
                 const bc = COLORS[f.latest_bucket_id] || '#6b7280';
                 const sc = f.att_status === 'PASS' ? 'badge-pass' : 'badge-fail';
+                const attemptId = f._attempt_id || 0;
+                // Roll up distinct bug IDs across all errors for the row-level cell
+                const rowBugs = [...new Set(f.errors.map(e => e.bug_id).filter(Boolean))];
+                const bugCell = rowBugs.length
+                    ? rowBugs.map(b => `<span class="bug-link" style="cursor:default;">${esc(b)}</span>`).join(', ')
+                    : '<span style="color:var(--muted);font-size:.75rem;">-</span>';
                 return `<tr>
                     <td>${esc(f.feature_name || '-')}</td>
                     <td>${esc(f.test_case_name || '-')}</td>
                     <td>#${f.attempt_number || 1}</td>
                     <td><span class="badge ${sc}">${f.att_status || 'N/A'}</span></td>
                     <td><span class="bucket-tag" style="background:${bc}18;color:${bc};">${bn}</span></td>
-                    <td>${renderErrorPills(f.errors)}</td>
+                    <td>${renderErrorPills(f.errors, attemptId)}</td>
                     <td>${f.has_sticky_failure ? '<span class="badge badge-sticky">STICKY</span>' : '-'}</td>
-                    <td>${esc(f.bug_id || '-')}</td>
+                    <td><div class="bug-cell">${bugCell}</div></td>
                     <td>${f.log_url ? `<a href="${esc(f.log_url)}" target="_blank" rel="noopener">View</a>` : '-'}</td>
                 </tr>`;
             }).join('');
@@ -658,9 +832,55 @@
         }
 
         function esc(s) {
+            if (s == null) return '';
             const d = document.createElement('div');
-            d.textContent = s;
+            d.textContent = String(s);
             return d.innerHTML;
+        }
+
+        // ---- Smart Ingest ----
+        function toggleIngest() {
+            const p = document.getElementById('ingest-panel');
+            p.style.display = p.style.display === 'none' ? '' : 'none';
+            if (p.style.display !== 'none') document.getElementById('ingest-url').focus();
+        }
+
+        async function submitIngest() {
+            const url = document.getElementById('ingest-url').value.trim();
+            const run = document.getElementById('ingest-run').value.trim();
+            const feature = document.getElementById('ingest-feature').value.trim();
+            const prog = document.getElementById('ingest-progress');
+
+            if (!url || !run) { toast('URL and Report Name are required'); return; }
+
+            prog.innerHTML = '<span class="spinner"></span> Discovering & triaging…';
+            try {
+                const body = { url, run_identifier: run };
+                if (feature) body.feature_name = feature;
+                const res = await fetch(`${API}/triage/discover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+                prog.textContent = `✓ Ingested ${data.ingested} test(s) into "${data.run_identifier}"`;
+                toast(`Ingested ${data.ingested} test(s) into ${data.run_identifier}`);
+
+                // refresh run list
+                const sel = document.getElementById('run-select');
+                const exists = [...sel.options].some(o => o.value === run);
+                if (!exists) {
+                    const o = document.createElement('option');
+                    o.value = run; o.textContent = `Cycle ${run}`;
+                    sel.insertBefore(o, sel.options[1]);
+                }
+                sel.value = run;
+                loadRun(run);
+            } catch (err) {
+                prog.textContent = '';
+                toast('Ingest failed: ' + err.message);
+            }
         }
 
         document.getElementById('search-box').addEventListener('input', renderTable);
