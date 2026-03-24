@@ -714,23 +714,8 @@ def process_attempt_batch(payloads: List[AttemptPayload], conn=Depends(get_db)):
     with conn.cursor() as cur:
         for p in payloads:
             _insert_attempt_logic(cur, p)
-
-    stats_by_run: List[dict] = []
-    seen_runs: set = set()
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        for p in payloads:
-            rid = p.run_id or 0
-            if rid and rid not in seen_runs:
-                seen_runs.add(rid)
-                cur.execute("SELECT identifier FROM runs WHERE id=%s", (rid,))
-                rr = cur.fetchone()
-                if rr:
-                    stats_by_run.append(_fetch_run_stats(cur, rid, rr["identifier"]))
-    for st in stats_by_run:
-        _log_run_stats(st)
-
     logger.info("Batch processed: %d attempts", len(payloads))
-    return {"status": "ok", "processed": len(payloads), "stats_by_run": stats_by_run}
+    return {"status": "ok", "processed": len(payloads)}
 
 
 @app.post(

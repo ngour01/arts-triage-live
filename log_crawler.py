@@ -151,7 +151,7 @@ def run_triage(cycle_id, record_limit=None):
     logger.info("[2/4] Fetching failure records from DragonSuite…")
     try:
         records = requests.get(
-            f"http://dragonsuite-app.vdp.lvn.broadcom.net/apis/v1/getCycleRecords?cycle_id={cycle_id}&job_status=fail",
+            f"http://localhost:9000/apis/v1/getCycleRecords?cycle_id={cycle_id}&job_status=fail",
             timeout=20,
         ).json().get("cycle_records", [])
     except Exception as e:
