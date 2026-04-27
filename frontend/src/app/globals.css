@@ -1,0 +1,217 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .dashboard-card {
+    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+  }
+
+  .dashboard-grid {
+    @apply grid gap-4 md:gap-6;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-accent;
+  }
+
+  .sidebar-link-active {
+    @apply bg-accent text-primary;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Tremor CSS Variables - Light Mode */
+:root {
+  --tremor-content-subtle: #64748b;
+  --tremor-content-default: #334155;
+  --tremor-content-emphasis: #0f172a;
+  --tremor-content-strong: #020617;
+  --tremor-content-inverted: #ffffff;
+
+  --tremor-border-default: #e2e8f0;
+
+  --tremor-background-subtle: #f8fafc;
+  --tremor-background-default: #ffffff;
+  --tremor-background-muted: #f1f5f9;
+  --tremor-background-emphasis: #334155;
+}
+
+/* Tremor CSS Variables - Dark Mode */
+.dark {
+  --tremor-content-subtle: #94a3b8;
+  --tremor-content-default: #cbd5e1;
+  --tremor-content-emphasis: #f1f5f9;
+  --tremor-content-strong: #ffffff;
+  --tremor-content-inverted: #0f172a;
+
+  --tremor-border-default: #334155;
+
+  --tremor-background-subtle: #1e293b;
+  --tremor-background-default: #0f172a;
+  --tremor-background-muted: #1e293b;
+  --tremor-background-emphasis: #475569;
+}
+
+/* Recharts (underlying Tremor charts) - Dark Mode Overrides */
+.dark .recharts-cartesian-axis-tick-value {
+  fill: #94a3b8 !important;
+}
+
+.dark .recharts-cartesian-axis-line,
+.dark .recharts-cartesian-axis-tick-line {
+  stroke: #334155 !important;
+}
+
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: #1e293b !important;
+}
+
+.dark .recharts-legend-item-text {
+  color: #cbd5e1 !important;
+}
+
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.dark .recharts-tooltip-label {
+  color: #f1f5f9 !important;
+}
+
+.dark .recharts-tooltip-item {
+  color: #cbd5e1 !important;
+}
+
+/* Tremor specific component overrides for dark mode */
+.dark [data-tremor-element="ChartTooltip"] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(30 41 59 / var(--tw-bg-opacity)) !important;
+  border-color: rgb(51 65 85 / var(--tw-border-opacity)) !important;
+}
+
+.dark [data-tremor-element="ChartLegend"] span {
+  color: #cbd5e1 !important;
+}
+
+.dark .recharts-pie-label-text {
+  fill: #f1f5f9 !important;
+}
+
+.dark .recharts-pie-label-line {
+  stroke: #94a3b8 !important;
+}
+
+.dark .recharts-text {
+  fill: #cbd5e1 !important;
+}
+
+.dark .recharts-layer text {
+  fill: #f1f5f9 !important;
+}
+
+.dark [data-tremor] text,
+.dark [class*="tremor"] text {
+  fill: #f1f5f9 !important;
+}
+
+.dark svg text {
+  fill: #e2e8f0 !important;
+}
+
+.dark svg text tspan {
+  fill: #e2e8f0 !important;
+}
