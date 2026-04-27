@@ -6,6 +6,8 @@ DROP TABLE IF EXISTS triage_signals CASCADE;
 DROP TABLE IF EXISTS error_patterns CASCADE;
 DROP TABLE IF EXISTS test_attempts CASCADE;
 DROP TABLE IF EXISTS test_executions CASCADE;
+-- Snapshot rows reference runs + buckets; drop before runs for clear teardown order
+DROP TABLE IF EXISTS run_stats_snapshots CASCADE;
 DROP TABLE IF EXISTS runs CASCADE;
 DROP TABLE IF EXISTS master_rules CASCADE;
 DROP TABLE IF EXISTS buckets CASCADE;
